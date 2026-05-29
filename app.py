@@ -1,3 +1,6 @@
 import streamlit as st
-st.title('나는 짱이다')
-st.write('바이브코딩')
+
+st.set_page_config(page_title="My App", page_icon="🚀")
+
+st.title("첫 번째 스트림릿 앱")
+st.write("GitHub + Streamlit 배포 성공!")
