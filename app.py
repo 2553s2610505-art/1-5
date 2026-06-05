@@ -1,71 +1,119 @@
 import streamlit as st
+from google import genai
 
+# -------------------
+# 페이지 설정
+# -------------------
 st.set_page_config(
-    page_title="면접 코칭 앱",
-    page_icon="🎤",
+    page_title="연애상담 챗봇",
+    page_icon="💕",
     layout="centered"
 )
 
-st.title("🎤 AI 면접 코칭 앱")
+# -------------------
+# Gemini 설정
+# -------------------
+try:
+    GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
+    client = genai.Client(api_key=GEMINI_API_KEY)
+except Exception:
+    st.error("GEMINI_API_KEY가 설정되지 않았습니다.")
+    st.stop()
 
-st.write("면접 질문에 답변하면 피드백을 제공합니다.")
+# -------------------
+# 시스템 프롬프트
+# -------------------
+SYSTEM_PROMPT = """
+당신은 전문적인 연애상담 챗봇입니다.
 
-# 질문 선택
-question = st.selectbox(
-    "면접 질문 선택",
-    [
-        "자기소개를 해보세요.",
-        "지원 동기를 말씀해주세요.",
-        "본인의 장점과 단점은 무엇인가요?",
-        "협업 경험을 설명해주세요.",
-        "갈등을 해결한 경험이 있나요?"
+규칙:
+1. 항상 한국어로 답변합니다.
+2. 사용자의 감정을 존중합니다.
+3. 현실적이고 구체적인 조언을 제공합니다.
+4. 일방적인 단정은 하지 않습니다.
+5. 상대방의 입장도 함께 고려합니다.
+6. 폭력, 스토킹, 협박, 자해 관련 내용은 안전을 우선 안내합니다.
+7. 답변은 읽기 쉽게 적절히 줄바꿈합니다.
+"""
+
+# -------------------
+# 제목
+# -------------------
+st.title("💕 연애상담 챗봇")
+st.caption("Gemini 2.5 Flash Lite 기반")
+
+# -------------------
+# 채팅 기록
+# -------------------
+if "messages" not in st.session_state:
+    st.session_state.messages = [
+        {
+            "role": "assistant",
+            "content": "안녕하세요 😊 연애 고민을 편하게 이야기해주세요."
+        }
     ]
-)
 
-st.subheader("면접 질문")
-st.info(question)
+# 기존 대화 표시
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
 
-# 답변 입력
-answer = st.text_area(
-    "답변 작성",
-    height=200,
-    placeholder="여기에 답변을 입력하세요..."
-)
+# -------------------
+# 사용자 입력
+# -------------------
+prompt = st.chat_input("연애 고민을 입력하세요...")
 
-# 피드백 버튼
-if st.button("피드백 받기"):
+if prompt:
+    # 사용자 메시지 저장
+    st.session_state.messages.append(
+        {"role": "user", "content": prompt}
+    )
 
-    if answer.strip() == "":
-        st.warning("답변을 입력해주세요.")
-    else:
-        st.subheader("📋 피드백")
+    with st.chat_message("user"):
+        st.markdown(prompt)
 
-        feedback = []
+    try:
+        # 대화 이력 구성
+        conversation = SYSTEM_PROMPT + "\n\n"
 
-        # 길이 체크
-        if len(answer) < 30:
-            feedback.append("답변이 너무 짧습니다. 조금 더 구체적으로 작성해보세요.")
-        else:
-            feedback.append("답변 길이가 적절합니다.")
+        for msg in st.session_state.messages:
+            if msg["role"] == "user":
+                conversation += f"사용자: {msg['content']}\n"
+            else:
+                conversation += f"상담사: {msg['content']}\n"
 
-        # 자신감 표현 체크
-        confidence_words = ["잘", "성장", "경험", "해결", "노력", "성과"]
+        # Gemini 호출
+        response = client.models.generate_content(
+            model="gemini-2.5-flash-lite",
+            contents=conversation
+        )
 
-        if any(word in answer for word in confidence_words):
-            feedback.append("긍정적이고 자신감 있는 표현이 포함되어 있습니다.")
-        else:
-            feedback.append("경험이나 성과를 강조하면 더 좋습니다.")
+        answer = response.text
 
-        # STAR 방식 힌트
-        if len(answer) > 80:
-            feedback.append("상황(Situation) - 행동(Action) - 결과(Result) 구조가 보이면 더 좋습니다.")
+    except Exception as e:
+        answer = f"⚠️ 오류가 발생했습니다.\n\n{str(e)}"
 
-        for item in feedback:
-            st.success(item)
+    with st.chat_message("assistant"):
+        st.markdown(answer)
 
-        st.subheader("⭐ 총평")
+    st.session_state.messages.append(
+        {"role": "assistant", "content": answer}
+    )
 
-        if len(answer) > 100:
-            st.write("전반적으로 좋은 답변입니다. 구체적인 사례를 추가하면 더 강력해집니다.")
-        else:
-            st.write("조금 더 자세한 경험과 결과를 포함해보세요.")
+# -------------------
+# 사이드바
+# -------------------
+with st.sidebar:
+    st.header("설정")
+
+    if st.button("채팅 초기화"):
+        st.session_state.messages = [
+            {
+                "role": "assistant",
+                "content": "안녕하세요 😊 연애 고민을 편하게 이야기해주세요."
+            }
+        ]
+        st.rerun()
+
+    st.markdown("---")
+    st.write("모델: Gemini 2.5 Flash Lite")
